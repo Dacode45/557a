@@ -1,0 +1,310 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title></title>
+  <script src="https://d3js.org/d3.v4.js"></script>
+</head>
+<style> /* set the CSS */
+.abbr {
+  font-size: 32px;
+  font-family: sans-serif;
+  fill: black;
+  text-align: center;
+}
+.time-line-line {
+  stroke-width:2px;
+  stroke:black;
+}
+.selected {
+  stroke-width: 3;
+  stroke: black;
+}
+.year-label {
+  font-size: 16px;
+  font-family: sans-serif;
+  fill: black;
+  text-align: center;
+}
+
+div.tooltip {
+  position: absolute;
+  text-align: left;
+  padding: 2px;
+  font: 12px sans-serif;
+  background: white;
+  border: 2px solid black;
+  border-radius: 8px;
+  pointer-events: none;
+}
+.state-name {
+  font-size: 24px;
+}
+
+.blue {
+  color: blue;
+  fill: blue;
+}
+
+.red {
+  color: red;
+  fill: red;
+}
+
+.tickBar {
+  stroke-width: 3;
+  stroke: black;
+}
+
+.tickLabel {
+  font-size: 24px;
+  text-decoration: underline;
+}
+</style>
+<body>
+  <header>
+    <h1> Election Results </h1>
+  </header>
+  <section>
+    <div class="timeline"></div>
+  </section>
+  <section>
+    <h2>Win Scale (Negative means democrats won!)
+      <div class="color-scale"></div>
+    </section>
+    <section>
+      <h2 id="chart-label"></h2>
+      <div class="chart"></div>
+    </section>
+
+    <script type="text/javascript">
+    var margin = {
+      top: 20,
+      bottom: 20,
+      left: 20,
+      right: 20
+    };
+    var boxSize = 100;
+    var chartWidth = 16*boxSize - margin.left - margin.right;
+    var timelineWidth = chartWidth;
+    var chartHeight = 9*boxSize - margin.top - margin.bottom;
+    var timelineHeight = 100;
+
+    var timelineCanvas = d3.select(".timeline")
+    .append("svg")
+    .attr("width", timelineWidth)
+    .attr("height", timelineHeight);
+
+    var chartCanvas = d3.select(".chart")
+    .append("svg")
+    .attr("width", chartWidth)
+    .attr("height", chartHeight);
+
+    var profile = d3.select(".chart")
+    .append("img")
+
+
+    var colorScaleCanvas = d3.select(".color-scale")
+    .append("svg")
+    .attr("width", timelineWidth)
+    .attr("height", timelineHeight)
+
+    var tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+
+    var chartLabel = d3.select("#chart-label")
+
+
+    var csvQueue = d3.queue();
+    csvQueue.defer(d3.csv, "csv/coordinates.csv");
+    csvQueue.defer(d3.csv, "csv/yearwise-winner.csv");
+    for(var i = 1940; i <= 2016; i += 4) {
+      csvQueue.defer(d3.csv, `csv/election-results-${i}.csv`);
+    }
+    csvQueue.await(function(error, coordinates, winners) {
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      var coordsByState = {};
+      for (var coord in coordinates) {
+        coord = coordinates[coord]
+        coordsByState[coord.state] = {x: coord.xpos, y: coord.ypos};
+        coordsByState[""] = {x: 0, y: 0};
+      }
+
+      var resultsByYear = [].slice.call(arguments,3);
+      var resultsIndex = d3.scaleQuantize()
+      .domain([1940, 2016])
+      .range(resultsByYear.map(function (_, i) {return i;}));
+      var selectedIndex = resultsIndex(2016);
+
+      var winnerByYear = {};
+      for (var winner in winners) {
+        winner = winners[winner]
+        winnerByYear[winner.YEAR] = winner.PARTY;
+      }
+
+      // 11,6
+      var stateX = d3.scaleLinear().domain([0,12]).range([0, chartWidth]);
+      var stateY = d3.scaleLinear().domain([0,8]).range([0, chartHeight]);
+
+      var colorX = d3.scaleLinear().domain([-60,60]).range([0,timelineWidth]);
+
+
+      var colorScale = d3.scaleLinear()
+      .domain([-60, -0, 0, 60])
+      .range(["blue", "lightblue", "salmon", "red"])
+      .clamp(true);
+      //.interpolate(d3.interpolateHcl);
+
+      var generateTimeline = function() {
+        var years = [];
+        for (var i = 1940; i <= 2016; i+=4) {
+          years.push(i);
+        }
+        var tickLength = timelineWidth/((2016-1940)/4 + 1);
+        var timeLineLine = timelineCanvas
+        .append("line")
+        .attr("class", "time-line-line")
+        .attr("x1",tickLength/2)
+        .attr("x2",timelineWidth-tickLength/2)
+        .attr("y1",timelineHeight/2)
+        .attr("y2",timelineHeight/2)
+
+        var groups = timelineCanvas.selectAll("g")
+          .data(years)
+          .enter()
+          .append("g")
+        var circles = groups
+          .selectAll(".yearCircle")
+          .data(function(d){return [d];})
+          .enter()
+          .append("circle")
+          .attr("class", function(y) {
+            return (resultsIndex(y) != selectedIndex)? "year-circle":"year-circle selected";
+          })
+          .attr("fill", function(y){
+            if (winnerByYear[y] == "D") {
+              return "blue";
+            }
+            return "red";
+          })
+          .attr("cx", function(y){
+            return tickLength/2 + tickLength*resultsIndex(y);
+          })
+          .attr("cy", timelineHeight/2)
+          .attr("r", tickLength*2/5)
+          .on("click", function(y){
+            console.log("running");
+            selectedIndex = resultsIndex(y);
+            run();
+          })
+
+        var labels = groups
+          .selectAll(".year-label")
+          .data(function(d){return [d];})
+          .enter()
+          .append("text")
+          .attr("class", "year-label")
+          .attr("x", function(y){
+            return 10+tickLength*resultsIndex(y);
+          })
+          .attr("y", timelineHeight/2 + tickLength*2/5 + 20)
+          .text(function(y){return y});
+      }
+
+      var generateScale = function() {
+        var winScale = []
+        for (var i = -60; i < 60; i+= 10) {
+          winScale.push(i);
+        }
+        var ticks = colorScaleCanvas.selectAll("g")
+        .data(winScale)
+        .enter()
+        .append("g")
+        var rectangles = ticks
+        .selectAll(".tickBar")
+        .data(function(d){return [d];})
+        .enter()
+        .append("rect")
+        .attr("class", "tickBar")
+        .attr("fill", function(d){return colorScale(d);})
+        .attr("x", function(d){return colorX(d)})
+        .attr("y", 0)
+        .attr("width", timelineWidth/10)
+        .attr("height", 30)
+        var label = ticks
+        .selectAll(".tickLabel")
+        .data(function(d){return [d];})
+        .enter()
+        .append("text")
+        .attr("class", "tickLabel")
+        .attr("x", function(d){return 10+colorX(d)})
+        .attr("y", 60)
+        .text(function(d){return `${d} to ${d+10}`})
+
+      }
+
+      var generateCharts = function(){
+        var result = resultsByYear[selectedIndex];
+        chartLabel.html(`Winner for ${1940+4*selectedIndex}: ${(winnerByYear[1940 + 4*selectedIndex] == 'D')? "Democrat" : "Republican"}`);
+        var states = chartCanvas.selectAll("g")
+        .data(result)
+        .enter()
+        .append("g")
+        var rectangles = states
+        .selectAll(".rect")
+        .data(function(d){ return [d];})
+        .enter()
+        .append("rect")
+        .attr("class", "rect")
+        .attr("fill", function(d){
+          var winPercent = d['R_Percentage']-d['D_Percentage'];
+          return colorScale(winPercent);
+        })
+        .on("mouseover", function(d){
+          tooltip.transition()
+          .duration(200)
+          .style("opacity", .9);
+          tooltip.html(`<p class="state-name">${d.State}</p><p>Electoral Votes: ${d['Total_EV']}</p><ul><li class="blue">${d['D_Nominee']}:${d['D_Votes']}(${d['D_Percentage']})</li><li class="red">${d['R_Nominee']}:${d['R_Votes']}(${d['R_Percentage']})</li></ul>`)
+          .style("left", (d3.event.pageX)+"px")
+          .style("top", (d3.event.pageY - 28)+"px");
+        })
+        // Text
+        .attr("x", function(d){console.log(d.State);return stateX(coordsByState[d.State].x)})
+        .attr("y", function(d){return stateY(coordsByState[d.State].y)})
+        .attr("width", boxSize)
+        .attr("height", boxSize)
+        var abbrs = states
+        .selectAll(".abbr")
+        .data(function(d){return [d];})
+        .enter()
+        .append("text")
+        .attr("class", "abbr")
+        .attr("x", function(d){return 3 + stateX(coordsByState[d.State].x)})
+        .attr("y", function(d){return boxSize/2 + stateY(coordsByState[d.State].y)})
+        .text(function(d){return `${d["Abbreviation"]} ${d["Total_EV"]}`;})
+
+
+      }
+      var run = function() {
+        timelineCanvas.html("");
+        colorScaleCanvas.html("");
+        chartCanvas.html("");
+        generateTimeline();
+        generateScale();
+        generateCharts();
+      }
+
+      run();
+
+    });
+
+    </script>
+  </body>
+  </html>

@@ -1,0 +1,119 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>D3 Test</title>
+  <script src="https://d3js.org/d3.v4.js"></script>
+</head>
+<style> /* set the CSS */
+
+body { font: 12px Arial;}
+
+path {
+  stroke: steelblue;
+  stroke-width: 2;
+  fill: none;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: grey;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+</style>
+<body>
+  <h1> Breast Cancer in Woman </h1>
+  <script type="text/javascript">
+
+  var margin = {top: 30, right: 20, bottom: 30, left: 50};
+  var width = 600 - margin.left - margin.right;
+  var height = 270 - margin.top - margin.bottom;
+
+  var x = d3.scaleLinear().range([0, width]);
+  var y = d3.scaleLinear().range([height, 0]);
+
+
+  var xValue = function(d) {return (Math.floor(d.index/5) | 0) + 1;}
+  var yValue = function(d) {return  (4 - d.index % 5) + 1;}
+
+  var xMap = function(d) { return x(xValue(d));}
+  var yMap = function(d) { return y(yValue(d));}
+
+  // add the graph canvas to the body of the webpage
+  var svg = d3.select("body").append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+  // add the tooltip area to the webpage
+  var tooltip = d3.select("body").append("div")
+  .attr("class", "tooltip")
+  .style("opacity", 0);
+
+  d3.tsv("disease.csv", function(error, data){
+    data = data.sort(function(a,b){
+      var group = function(g){ return (g == "disease")? 0: 1;}
+      var test = function(t){return (t == "neg")? 0 : 1;}
+      var agroup = group(a.group);
+      var bgroup = group(b.group);
+      var atest = test(a.test);
+      var btest = test(b.test);
+      return (agroup < bgroup)? -1 : (bgroup < agroup)? 1 : (atest < btest)? -1 : (btest < atest)? 1 : (a.id - b.id);
+    });
+
+    data = data.map(function(d, index){
+      d.index = index;
+      return d;
+    });
+
+    x.domain([0,20]);
+    y.domain([0,5]);
+
+    svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height +")")
+    .call(d3.axisBottom(x));
+
+    // Add the Y Axis
+    svg.append("g")
+    .attr("class", "y axis")
+    .call(d3.axisLeft(y));
+
+    svg.selectAll(".dot")
+      .data(data)
+    .enter().append("circle")
+      .attr("class", "dot")
+      .attr("r", 9)
+      .attr("cx", xMap)
+      .attr("cy", yMap)
+      .style("fill", function(d) {
+        return (d.group == "disease")? "red" : "blue";
+      })
+      .attr("stroke", function(d) {
+        return (d.test == "pos")? "black" : "none";
+      })
+      .attr("stroke-width", 3)
+      .on("mouseover", function(d) {
+          tooltip.transition()
+               .duration(200)
+               .style("opacity", .9);
+          tooltip.html(d.group + "<br/> (" + d.test + ")")
+               .style("left", (d3.event.pageX + 5) + "px")
+               .style("top", (d3.event.pageY - 28) + "px");
+      })
+      .on("mouseout", function(d) {
+          tooltip.transition()
+               .duration(500)
+               .style("opacity", 0);
+      });
+
+
+
+  });
+  </script>
+</body>
+</html>

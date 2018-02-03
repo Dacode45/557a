@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Theme River</title>
+  <script src="https://d3js.org/d3.v4.js"></script>
+</head>
+<style> /* set the CSS */
+  .tooltip {
+    background: #fff;
+  }
+</style>
+<body>
+  <section>
+    <h1> U.S Gun Manufacturing 1986-2011</h1>
+  </section>
+  <section class="canvas">
+    <div class="chart"></div>
+  </section>
+</body>
+<script>
+var margin = {
+  top: 100,
+  bottom: 100,
+  left: 100,
+  right: 100
+};
+var width = 800 - margin.left - margin.right;
+var height = 640 - margin.top - margin.bottom;
+
+var canvas = d3.select(".canvas")
+.append("svg")
+.attr("width", width + margin.left + margin.right)
+.attr("height", height + margin.top + margin.bottom)
+.append("g")
+.attr("transform",
+"translate(" + margin.left + "," + margin.top + ")");
+
+d3.csv("firearms.csv", function(data){
+  console.log("Data", data);
+
+  var keys = [];
+  for (key in data[0]) {
+    if (key !== "Year" && key !== "Total") {
+      keys.push(key);
+    }
+  }
+
+  var series = d3.stack()
+  .offset(d3.stackOffsetWiggle)
+  .keys(keys)(data);
+
+  var minY = d3.min(series, function(datum){
+    return d3.min(datum, function(d){
+      return d[0]
+    });
+  });
+
+  var maxY = d3.max(series, function(datum){
+    return d3.max(datum, function(d){
+      return d[1]
+    });
+  });
+
+  var maxTotal = d3.max(data, function(d){
+    return d.Total;
+  })
+
+  var x = d3.scaleLinear().domain(d3.extent(data, function(d){return d.Year;})).range([0,width]);
+  var y = d3.scaleLinear().domain([minY,maxY]).range([height, 0]);
+
+  var colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+  var area = d3.area()
+  .curve(d3.curveCardinal)
+  .x(function(d){ return x(d.data.Year)})
+  .y0(function(d){return y(d[0]);})
+  .y1(function(d){return y(d[1]);})
+
+  var tooltip = d3.select("body")
+  .append("div")
+  .attr("class", "tooltip remove")
+  .style("position", "absolute")
+  .style("z-index", "20")
+  .style("visibility", "hidden")
+  .style("top", "30px")
+  .style("left", "55px");
+
+  console.log("series", series);
+
+  canvas.selectAll(".layer")
+  .data(series)
+  .enter().append("path")
+  .attr("class", "layer")
+  .attr("d", function(d){
+    return area(d)
+  })
+  .style("fill", function(d, i) { return colorScale(i)});
+
+  var mousex;
+  var mouseDate;
+  var guns;
+  var dates = [];
+  canvas.selectAll(".layer")
+  .on("mouseover", function(d, i){
+    canvas.selectAll(".layer").transition()
+    .duration(250)
+    .attr("opacity", function(d, j){
+      return j != i ? 0.6: 1
+    })
+  })
+  .on("mousemove", function(d,i){
+    mousex = d3.mouse(this);
+    mousex = mousex[0];
+    var invertedx = x.invert(mousex);
+    invertedx = Math.floor(invertedx);
+    for (var k = 0; k < d.length; k++) {
+      dates[k] = d[k].data.Year;
+    }
+    mouseDate = dates.indexOf(""+invertedx);
+    guns = d[mouseDate].data[keys[i]];
+
+    d3.select(this)
+      .classed("hover", true)
+      .attr("stroke-width", "0.5px");
+    tooltip.html(`<p>(${keys[i]}, ${invertedx}, ${guns})</p>`)
+      .style("visibility", "visible")
+      .style("left", (d3.event.pageX)+"px")
+      .style("top", (d3.event.pageY)+"px")
+  })
+  .on("mouseout", function(d, i){
+    canvas.selectAll(".layer")
+    .transition()
+    .duration(250)
+    .attr("opacity", "1");
+
+    d3.select(this)
+      .classed("hover", false)
+      .attr("stroke-width", "0px")
+    tooltip.html("")
+      //.style("visibility", "hidden")
+  })
+
+  // Add the x Axis
+  canvas.append("g")
+  .attr("transform", "translate(0," + (height + 20) + ")")
+  .call(d3.axisBottom(x).tickFormat(d3.format("d")))
+
+  // text label for the x axis
+  canvas.append("text")
+  .attr("transform",
+  "translate(" + (width/2) + " ," +
+  (height + margin.top + 20) + ")")
+  .style("text-anchor", "middle")
+  .text("Year");
+
+  // Add the y Axis
+  canvas.append("g")
+  .call(d3.axisLeft(y));
+
+  // text label for the y axis
+  canvas.append("text")
+  .attr("transform", "rotate(-90)")
+  .attr("y", 0 - margin.left)
+  .attr("x",0 - (height / 2))
+  .attr("dy", "1em")
+  .style("text-anchor", "middle")
+  .text("Guns")
+})
+</script>
+</html>
